@@ -1,9 +1,14 @@
 package visionsegmentation;
 
+import java.awt.image.BufferedImage;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import javax.swing.ImageIcon;
+import javax.swing.JOptionPane;
 
 /**
  *
@@ -17,15 +22,10 @@ public class Main {
      */
     public static void main(String[] args) {
         int[][] image = read("zebras.raw");
-
-        print(toDouble(image));
-        double[][] dimage = applyLaws(toDouble(image));
-
+        List<double[][]> maskedImage = applyLaws(toDouble(image));
     }
 
-    private static double[][] applyLaws(double[][] image){
-        double[][] result = new double[SIZE][SIZE];
-        
+    private static List<double[][]> applyLaws(double[][] image){
         double[][] l5 = {{1,4,6,4,1}};
         double[][] e5 = {{-1, -2, 0, 2, 1}};
         double[][] s5 = {{-1,0,2,0,-1}};
@@ -37,6 +37,7 @@ public class Main {
          * neighborhood
          */
         int neighborhood = 15;
+        double[][] processedImage = new double[SIZE][SIZE];
         //for each pixel
         for(int i = 0; i < SIZE; i++){
             for(int j = 0; j < SIZE; j++){
@@ -53,7 +54,7 @@ public class Main {
                     }
                 }
                 average = average / (neighborhood * neighborhood);
-                result[i][j] = image[i][j] - average;
+                processedImage[i][j] = image[i][j] - average;
             }
         }
 
@@ -69,7 +70,7 @@ public class Main {
          * final maps
          */
 
-        double[][] map1 = applyMask(result, average(multiply(l5, transpose(e5)), multiply(e5, transpose(l5))), 15);
+        double[][] map1 = average(multiply(l5, transpose(e5)), multiply(e5, transpose(l5)));        
         double[][] map2 = average(multiply(l5, transpose(s5)), multiply(s5, transpose(l5)));
         double[][] map3 = average(multiply(l5, transpose(r5)), multiply(r5, transpose(l5)));
         double[][] map4 = multiply(e5, transpose(e5));
@@ -79,15 +80,16 @@ public class Main {
         double[][] map8 = average(multiply(s5, transpose(r5)), multiply(r5, transpose(s5)));
         double[][] map9 = multiply(r5, transpose(r5));
 
-        print(map1);
-        print(map2);
-        print(map3);
-        print(map4);
-        print(map5);
-        print(map6);
-        print(map7);
-        print(map8);
-        print(map9);
+        List<double[][]> result = new ArrayList<double[][]>(9);
+        result.add(applyMask(processedImage, map1));
+        result.add(applyMask(processedImage, map2));
+        result.add(applyMask(processedImage, map3));
+        result.add(applyMask(processedImage, map4));
+        result.add(applyMask(processedImage, map5));
+        result.add(applyMask(processedImage, map6));
+        result.add(applyMask(processedImage, map7));
+        result.add(applyMask(processedImage, map8));
+        result.add(applyMask(processedImage, map9));
 
         return result;
     }
@@ -95,10 +97,9 @@ public class Main {
     /**
      * @param image a square SIZExSIZE matrix
      * @param mask a square MxM matrix
-     * @param neighborhood the size neighborhood to apply the mask
      * @return a square SIZExSIZE matrix which has had the specified mask applied to each pixel
      */
-    private static double[][] applyMask(double[][] image, double[][] mask, int neighborhood)
+    private static double[][] applyMask(double[][] image, double[][] mask)
     {
         double[][] result = new double[SIZE][SIZE];
 
@@ -107,27 +108,15 @@ public class Main {
             for(int j = 0; j < SIZE; j++){
                 result[i][j]=0;
 
-                //count occurence in neighborhood
-                int count = 0;
-                for(int k = -neighborhood/2; k < neighborhood/2; k++){
-                    for(int l = -neighborhood/2; l < neighborhood/2; l++){
-                        //apply mask
-                        boolean match = true;
-                        for(int m = 0; m < mask.length && match; m++){
-                            for(int n = 0; n < mask[0].length && match; n++){
-                                //@todo: dont use exceptions for flow control
-                                try{
-                                if(image[i+k][j+l] != mask[m][n]){
-                                    match = false;
-                                }
-                                }catch(ArrayIndexOutOfBoundsException e){
-                                }
-                            }
-                        }
-                        if(match) count++;
+                int maskSize = mask.length;
+                for(int k = 0; k < maskSize; k++){
+                    for(int l = 0; l < maskSize; l++){
+                        try{
+                            result[i][j] += image[i+k-maskSize/2][j+l-maskSize/2] * mask[k][l];
+                        } catch (ArrayIndexOutOfBoundsException e) {}
                     }
                 }
-                result[i][j] = count;
+                
             }
         }
         return result;
@@ -172,7 +161,7 @@ public class Main {
         int m = a.length;
         int n = b.length;
         double[][] c = new double[l][n];
-
+        
         for(int i = 0; i < l; i++){
             for(int j = 0; j < n; j++){
                 for(int k = 0; k < m; k++){
@@ -180,7 +169,6 @@ public class Main {
                 }
             }
         }
-
         return c;
     }
 
@@ -214,6 +202,18 @@ public class Main {
                 System.out.print("}\n");
         }
         System.out.print("\n");
+    }
+
+    private static void show(double[][] image){
+        BufferedImage bimage = new BufferedImage(SIZE, SIZE, BufferedImage.TYPE_INT_RGB);
+        for(int y = 0; y < SIZE; y++){
+            for(int x = 0; x < SIZE; x++){
+                int value = (int)image[y][x] << 16 | (int)image[y][x] << 8 | (int)image[y][x];
+                bimage.setRGB(x, y, value);
+            }
+        }
+
+        JOptionPane.showMessageDialog(null, new ImageIcon(bimage));
     }
 
     public static int[][] read(String file){
